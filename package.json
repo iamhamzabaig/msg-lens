@@ -1,0 +1,46 @@
+{
+  "name": "msg-lens",
+  "version": "1.0.1",
+  "description": "Universal .msg (Outlook) file parser that outputs sanitized HTML",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "msg",
+    "outlook",
+    "email",
+    "parser",
+    "mapi"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cfb": "^1.2.2",
+    "dompurify": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/jsdom": "^28.0.1",
+    "jsdom": "^29.0.1",
+    "serve": "^14.2.6",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

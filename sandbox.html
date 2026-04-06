@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>msg-lens Sandbox</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
+    .toolbar {
+      background: #1a1a2e; color: #fff; padding: 16px 24px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .toolbar h1 { font-size: 18px; font-weight: 600; margin-right: auto; }
+    .toolbar input[type="text"] {
+      flex: 1; min-width: 300px; padding: 8px 12px; border: none; border-radius: 6px;
+      font-size: 14px; background: #16213e; color: #fff; outline: none;
+    }
+    .toolbar input::placeholder { color: #888; }
+    .toolbar button {
+      padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px;
+      cursor: pointer; font-weight: 600; background: #0f3460; color: #fff;
+    }
+    .toolbar button:hover { background: #e94560; }
+    .drop-zone {
+      border: 2px dashed #ccc; border-radius: 12px; padding: 40px; text-align: center;
+      margin: 20px 24px; color: #888; font-size: 16px; transition: all 0.2s;
+    }
+    .drop-zone.dragover { border-color: #e94560; background: #fff0f3; color: #e94560; }
+    .meta {
+      background: #fff; margin: 0 24px; padding: 16px 20px; border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: none;
+    }
+    .meta table { width: 100%; font-size: 14px; }
+    .meta td { padding: 4px 8px; vertical-align: top; }
+    .meta td:first-child { font-weight: 600; color: #555; width: 120px; }
+    .preview {
+      margin: 16px 24px; background: #fff; border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; display: none;
+    }
+    .preview-header { padding: 12px 20px; background: #fafafa; border-bottom: 1px solid #eee; font-weight: 600; }
+    .preview iframe { width: 100%; min-height: 600px; border: none; }
+    .error { color: #e94560; margin: 20px 24px; font-weight: 600; }
+    .loading { text-align: center; padding: 40px; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>msg-lens</h1>
+    <input type="text" id="urlInput" placeholder="Paste .msg URL and press Parse">
+    <button onclick="parseFromUrl()">Parse URL</button>
+    <label style="cursor:pointer">
+      <button onclick="document.getElementById('fileInput').click()">Browse File</button>
+    </label>
+    <input type="file" id="fileInput" accept=".msg" style="display:none" onchange="parseFromFile(event)">
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    Drop a .msg file here — or use the URL / Browse options above
+  </div>
+
+  <div class="error" id="error"></div>
+
+  <div class="meta" id="meta">
+    <table>
+      <tr><td>Subject</td><td id="metaSubject"></td></tr>
+      <tr><td>From</td><td id="metaFrom"></td></tr>
+      <tr><td>To</td><td id="metaTo"></td></tr>
+      <tr><td>CC</td><td id="metaCc"></td></tr>
+      <tr><td>Date</td><td id="metaDate"></td></tr>
+      <tr><td>Attachments</td><td id="metaAttachments"></td></tr>
+    </table>
+  </div>
+
+  <div class="preview" id="preview">
+    <div class="preview-header">Email Preview</div>
+    <iframe id="previewFrame" sandbox="allow-same-origin"></iframe>
+  </div>
+
+  <script type="module">
+    import { parseMsgFile } from './dist/index.mjs';
+
+    window.parseMsgFile = parseMsgFile;
+
+    window.parseFromUrl = async function () {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+      showLoading();
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        render(parseMsgFile(buffer));
+      } catch (e) {
+        showError(e.message);
+      }
+    };
+
+    window.parseFromFile = function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      showLoading();
+      const reader = new FileReader();
+      reader.onload = () => render(parseMsgFile(reader.result));
+      reader.readAsArrayBuffer(file);
+    };
+
+    // Drag & drop
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.msg')) {
+        showLoading();
+        const reader = new FileReader();
+        reader.onload = () => render(parseMsgFile(reader.result));
+        reader.readAsArrayBuffer(file);
+      } else {
+        showError('Please drop a .msg file');
+      }
+    });
+
+    function render(result) {
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+      if (!result.success) {
+        showError(`${result.error.code}: ${result.error.message}`);
+        return;
+      }
+      const msg = result.message;
+
+      // Meta
+      const meta = document.getElementById('meta');
+      meta.style.display = 'block';
+      document.getElementById('metaSubject').textContent = msg.subject;
+      document.getElementById('metaFrom').textContent = `${msg.senderName} <${msg.senderEmail}>`;
+      document.getElementById('metaTo').textContent = msg.recipients.map(r => `${r.name} <${r.email}>`).join(', ');
+      document.getElementById('metaCc').textContent = msg.ccRecipients.map(r => `${r.name} <${r.email}>`).join(', ') || '—';
+      document.getElementById('metaDate').textContent = msg.headers.date || '—';
+      document.getElementById('metaAttachments').textContent = msg.attachments.length
+        ? msg.attachments.map(a => `${a.filename} (${(a.size / 1024).toFixed(1)} KB)`).join(', ')
+        : 'None';
+
+      // Preview
+      const preview = document.getElementById('preview');
+      preview.style.display = 'block';
+      const iframe = document.getElementById('previewFrame');
+      iframe.srcdoc = msg.bodyHtml;
+
+      // Hide drop zone
+      dropZone.style.display = 'none';
+    }
+
+    function showError(msg) {
+      document.getElementById('error').textContent = msg;
+      document.getElementById('meta').style.display = 'none';
+      document.getElementById('preview').style.display = 'none';
+      dropZone.style.display = 'block';
+    }
+
+    function showLoading() {
+      document.getElementById('error').textContent = '';
+      dropZone.innerHTML = 'Parsing...';
+    }
+  </script>
+</body>
+</html>

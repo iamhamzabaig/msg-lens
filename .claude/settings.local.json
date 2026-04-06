@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(node --input-type=module -e \":*)",
+      "Bash(node debug-rtf.mjs)",
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx tsup:*)",
+      "Bash(grep -o '.\\\\\\\\htmlrtf[^0 ].' debug-rtf-output.txt)",
+      "Bash(node playground.mjs \"https://domain.oreiuserp.com/Attachment//3_57209_OP_20260402_Don%E2%80%99t%20just%20prompt%20%E2%80%93%20ship_%20Join%20us%20at%20NTL%20DEPLOY.msg\")"
+    ]
+  }
+}

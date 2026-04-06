@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Preview Server",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "3000", "."],
+      "port": 3000
+    },
+    {
+      "name": "Vitest Watch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vitest"],
+      "port": 0
+    },
+    {
+      "name": "Tsup Build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsup"],
+      "port": 0
+    }
+  ]
+}
