@@ -49,3 +49,6 @@ export const PidTagRenderingPosition = 0x370b;
 export const MAPI_TO = 1;
 export const MAPI_CC = 2;
 export const MAPI_BCC = 3;
+
+// Attachment methods
+export const ATTACH_EMBEDDED_MSG = 5;

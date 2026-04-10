@@ -1,6 +1,18 @@
 # msg-lens
 
-A universal `.msg` (Outlook) file parser that extracts email content and outputs sanitized HTML. Works in **Node.js**, **React**, **Angular**, **Vue**, and **plain browser JS**.
+Universal `.msg` (Outlook) email parser for Node.js and browsers.
+
+`msg-lens` parses Outlook `.msg` files into a typed object and returns HTML that is sanitized and ready to render.
+
+## Why msg-lens
+
+- Works in Node.js and modern browsers
+- Single API: `parseMsgFile(data)`
+- Never throws uncaught parse errors (typed result wrapper)
+- Sanitizes HTML output (XSS-safe defaults)
+- Resolves inline `cid:` images to base64 data URIs
+- Supports Outlook RTF-with-HTML payload extraction
+- Handles embedded `.msg` attachments (recursive with depth limit)
 
 ## Install
 
@@ -10,33 +22,47 @@ npm install msg-lens
 
 ## Quick Start
 
+### Node.js
+
+```ts
+import { readFileSync } from 'fs';
+import { parseMsgFile } from 'msg-lens';
+
+const data = readFileSync('email.msg');
+const result = parseMsgFile(data);
+
+if (!result.success) {
+  console.error(result.error.code, result.error.message);
+  process.exit(1);
+}
+
+console.log('Subject:', result.message.subject);
+console.log('From:', `${result.message.senderName} <${result.message.senderEmail}>`);
+console.log('Attachments:', result.message.attachments.length);
+```
+
+### Browser (file input)
+
 ```ts
 import { parseMsgFile } from 'msg-lens';
 
-// From a URL
-const response = await fetch('https://example.com/email.msg');
-const buffer = await response.arrayBuffer();
-const result = parseMsgFile(buffer);
+const input = document.querySelector<HTMLInputElement>('#file');
+const preview = document.querySelector<HTMLIFrameElement>('#preview');
 
-if (result.success) {
-  console.log(result.message.subject);
-  console.log(result.message.senderName);
-  console.log(result.message.bodyHtml); // sanitized HTML ready to render
-}
-```
+input?.addEventListener('change', () => {
+  const file = input.files?.[0];
+  if (!file) return;
 
-```ts
-// From a file input (browser)
-const input = document.querySelector('input[type="file"]');
-input.addEventListener('change', (e) => {
   const reader = new FileReader();
   reader.onload = () => {
-    const result = parseMsgFile(reader.result);
-    if (result.success) {
-      document.getElementById('preview').innerHTML = result.message.bodyHtml;
+    const result = parseMsgFile(reader.result as ArrayBuffer);
+    if (!result.success) {
+      console.error(result.error);
+      return;
     }
+    if (preview) preview.srcdoc = result.message.bodyHtml;
   };
-  reader.readAsArrayBuffer(e.target.files[0]);
+  reader.readAsArrayBuffer(file);
 });
 ```
 
@@ -44,161 +70,148 @@ input.addEventListener('change', (e) => {
 
 ### `parseMsgFile(data: ArrayBuffer | Uint8Array): ParseResult`
 
-Parses a `.msg` file and returns a typed result.
-
 ```ts
 type ParseResult =
   | { success: true; message: ParsedMessage }
   | { success: false; error: ParseError };
 ```
 
-### ParsedMessage
+### `ParsedMessage`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `subject` | `string` | Email subject line |
+| Field | Type | Notes |
+| --- | --- | --- |
+| `subject` | `string` | Message subject |
 | `senderName` | `string` | Sender display name |
-| `senderEmail` | `string` | Sender email address |
+| `senderEmail` | `string` | Sender email |
 | `recipients` | `Recipient[]` | To recipients |
 | `ccRecipients` | `Recipient[]` | CC recipients |
 | `bccRecipients` | `Recipient[]` | BCC recipients |
 | `bodyText` | `string` | Plain text body |
-| `bodyHtml` | `string` | Sanitized HTML body (XSS-safe) |
+| `bodyHtml` | `string` | Sanitized HTML body |
 | `headers` | `MessageHeaders` | Date, message ID, importance |
-| `attachments` | `Attachment[]` | File attachments |
+| `attachments` | `Attachment[]` | Attachments and inline resources |
 
-### Recipient
+### `Recipient`
 
 | Field | Type |
-|-------|------|
+| --- | --- |
 | `name` | `string` |
 | `email` | `string` |
 | `type` | `'to' \| 'cc' \| 'bcc'` |
 
-### Attachment
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `filename` | `string` | Original filename |
-| `mimeType` | `string` | MIME type |
-| `contentId` | `string` | Content-ID for inline images |
-| `content` | `Uint8Array` | Raw file bytes |
-| `size` | `number` | Size in bytes |
-| `isInline` | `boolean` | Whether it's an embedded image |
-
-### ParseError
+### `MessageHeaders`
 
 | Field | Type |
-|-------|------|
-| `code` | `'INVALID_CFB' \| 'MISSING_PROPERTIES' \| 'MALFORMED_MAPI' \| 'SANITIZATION_FAILED' \| 'UNKNOWN_ERROR'` |
+| --- | --- |
+| `date` | `string` |
+| `dateObject` | `Date \| null` |
+| `messageId` | `string` |
+| `inReplyTo` | `string` |
+| `importance` | `'low' \| 'normal' \| 'high'` |
+
+### `Attachment`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `filename` | `string` | Attachment filename |
+| `mimeType` | `string` | MIME type |
+| `contentId` | `string` | Used for inline `cid:` references |
+| `content` | `Uint8Array` | Raw bytes |
+| `size` | `number` | Byte length |
+| `isInline` | `boolean` | Inline/embedded indicator |
+| `embeddedMessage` | `ParsedMessage \| undefined` | Present for embedded `.msg` attachments |
+
+### `ParseError`
+
+| Field | Type |
+| --- | --- |
+| `code` | `ParseErrorCode` |
 | `message` | `string` |
 
-## Framework Examples
+`ParseErrorCode` values:
 
-### React
+- `INVALID_CFB`
+- `INVALID_EML`
+- `MISSING_PROPERTIES`
+- `MALFORMED_MAPI`
+- `MALFORMED_MIME`
+- `SANITIZATION_FAILED`
+- `UNKNOWN_ERROR`
 
-```tsx
-import { parseMsgFile, ParsedMessage } from 'msg-lens';
-import { useState } from 'react';
+## Security Model
 
-function MsgViewer() {
-  const [email, setEmail] = useState<ParsedMessage | null>(null);
+`bodyHtml` is sanitized before returning from `parseMsgFile`.
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = parseMsgFile(reader.result as ArrayBuffer);
-      if (result.success) setEmail(result.message);
-    };
-    reader.readAsArrayBuffer(file);
-  };
+Current protections include:
 
-  return (
-    <div>
-      <input type="file" accept=".msg" onChange={handleFile} />
-      {email && (
-        <>
-          <h2>{email.subject}</h2>
-          <p>From: {email.senderName}</p>
-          <iframe srcDoc={email.bodyHtml} style={{ width: '100%', height: 600 }} />
-        </>
-      )}
-    </div>
-  );
-}
+- removes `<script>` tags
+- strips inline event handlers (`on*`)
+- blocks `javascript:` URLs
+- strips known tracking-pixel patterns (1x1 images)
+- rewrites `cid:` image references to safe `data:` URIs using attachment bytes
+
+## Runtime Compatibility
+
+- Browser-safe parser code (`ArrayBuffer` / `Uint8Array`)
+- Dual package output:
+  - ESM: `dist/index.mjs`
+  - CJS: `dist/index.js`
+  - Types: `dist/index.d.ts`
+
+## Development
+
+```bash
+npm install
+npm run test
+npm run typecheck
+npm run build
 ```
 
-### Vue
+Useful local files:
 
-```vue
-<script setup lang="ts">
-import { ref } from 'vue';
-import { parseMsgFile, ParsedMessage } from 'msg-lens';
+- `sandbox.html` for browser preview/testing
+- `playground.mjs` for quick Node parsing tests
 
-const email = ref<ParsedMessage | null>(null);
+## Release Checklist (Git + npm)
 
-function handleFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const result = parseMsgFile(reader.result as ArrayBuffer);
-    if (result.success) email.value = result.message;
-  };
-  reader.readAsArrayBuffer(file);
-}
-</script>
+### 1) Validate locally
 
-<template>
-  <input type="file" accept=".msg" @change="handleFile" />
-  <div v-if="email">
-    <h2>{{ email.subject }}</h2>
-    <p>From: {{ email.senderName }}</p>
-    <iframe :srcdoc="email.bodyHtml" style="width: 100%; height: 600px" />
-  </div>
-</template>
+```bash
+npm run test
+npm run typecheck
+npm run build
 ```
 
-### Node.js
+### 2) Update version
 
-```ts
-import { readFileSync } from 'fs';
-import { parseMsgFile } from 'msg-lens';
+Choose one:
 
-const buffer = readFileSync('email.msg');
-const result = parseMsgFile(buffer);
-
-if (result.success) {
-  console.log('Subject:', result.message.subject);
-  console.log('From:', result.message.senderName, result.message.senderEmail);
-  console.log('Attachments:', result.message.attachments.length);
-}
+```bash
+npm version patch
+npm version minor
+npm version major
 ```
 
-## Features
+This updates `package.json`, `package-lock.json`, creates a commit, and tags the release.
 
-- **Universal** — works in Node.js and all browsers (no `Buffer` or `fs` dependency)
-- **Single function API** — `parseMsgFile()` does everything
-- **XSS-safe HTML** — scripts, event handlers, and tracking pixels stripped
-- **Inline images** — `cid:` references resolved to base64 data URIs
-- **RTF support** — extracts HTML from Outlook's compressed RTF format
-- **Smart quotes** — Windows-1252 characters decoded correctly
-- **Never crashes** — returns typed errors instead of throwing
-- **Tiny** — only 2 runtime dependencies (`cfb` + `dompurify`)
-- **TypeScript** — full type definitions included
-- **Dual format** — ships ESM + CJS
+### 3) Push code and tags
 
-## Security
+```bash
+git push origin main
+git push origin --tags
+```
 
-All HTML output is sanitized:
+### 4) Publish to npm
 
-- `<script>` tags removed
-- `on*` event attributes stripped
-- `javascript:` URIs blocked
-- 1x1 tracking pixel images removed
-- `cid:` image references replaced with safe base64 data URIs
+```bash
+npm publish --access public
+```
+
+### 5) Verify published version
+
+```bash
+npm view msg-lens version
+```
 
 ## License
 
