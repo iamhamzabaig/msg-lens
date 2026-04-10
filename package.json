@@ -29,7 +29,7 @@
     "mapi"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "cfb": "^1.2.2",
     "dompurify": "^3.3.3"

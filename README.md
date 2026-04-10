@@ -1,20 +1,32 @@
 # msg-lens
 
-Universal `.msg` (Outlook) email parser for Node.js and browsers.
+[![npm version](https://img.shields.io/npm/v/msg-lens?logo=npm)](https://www.npmjs.com/package/msg-lens)
+[![npm downloads](https://img.shields.io/npm/dm/msg-lens?logo=npm)](https://www.npmjs.com/package/msg-lens)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![TypeScript](https://img.shields.io/badge/types-TypeScript-3178C6.svg)](https://www.typescriptlang.org/)
 
-`msg-lens` parses Outlook `.msg` files into a typed object and returns HTML that is sanitized and ready to render.
+Universal Outlook `.msg` parser for Node.js and browsers.  
+Parse once, get typed metadata + sanitized HTML ready to render.
 
-## Why msg-lens
+## Package Links
 
-- Works in Node.js and modern browsers
-- Single API: `parseMsgFile(data)`
-- Never throws uncaught parse errors (typed result wrapper)
-- Sanitizes HTML output (XSS-safe defaults)
-- Resolves inline `cid:` images to base64 data URIs
-- Supports Outlook RTF-with-HTML payload extraction
-- Handles embedded `.msg` attachments (recursive with depth limit)
+- npm package: https://www.npmjs.com/package/msg-lens
+- npm versions: https://www.npmjs.com/package/msg-lens?activeTab=versions
+- npm files (tarball): https://www.npmjs.com/package/msg-lens?activeTab=code
+- GitHub repository: https://github.com/iamhamzabaig/msg-lens
+- Issues: https://github.com/iamhamzabaig/msg-lens/issues
 
-## Install
+## Highlights
+
+- Cross-platform parsing: Node.js + browser support
+- Single entrypoint: `parseMsgFile(data)`
+- Typed result contract (`success` + structured payload/error)
+- HTML sanitization for safe rendering
+- Inline image resolution (`cid:` -> `data:` URI)
+- Outlook RTF HTML extraction support
+- Embedded `.msg` attachments support
+
+## Installation
 
 ```bash
 npm install msg-lens
@@ -28,8 +40,8 @@ npm install msg-lens
 import { readFileSync } from 'fs';
 import { parseMsgFile } from 'msg-lens';
 
-const data = readFileSync('email.msg');
-const result = parseMsgFile(data);
+const raw = readFileSync('email.msg');
+const result = parseMsgFile(raw);
 
 if (!result.success) {
   console.error(result.error.code, result.error.message);
@@ -41,29 +53,22 @@ console.log('From:', `${result.message.senderName} <${result.message.senderEmail
 console.log('Attachments:', result.message.attachments.length);
 ```
 
-### Browser (file input)
+### Browser
 
 ```ts
 import { parseMsgFile } from 'msg-lens';
 
-const input = document.querySelector<HTMLInputElement>('#file');
-const preview = document.querySelector<HTMLIFrameElement>('#preview');
+async function openMsg(file: File) {
+  const buffer = await file.arrayBuffer();
+  const result = parseMsgFile(buffer);
 
-input?.addEventListener('change', () => {
-  const file = input.files?.[0];
-  if (!file) return;
+  if (!result.success) {
+    console.error(result.error);
+    return;
+  }
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    const result = parseMsgFile(reader.result as ArrayBuffer);
-    if (!result.success) {
-      console.error(result.error);
-      return;
-    }
-    if (preview) preview.srcdoc = result.message.bodyHtml;
-  };
-  reader.readAsArrayBuffer(file);
-});
+  document.getElementById('preview')!.innerHTML = result.message.bodyHtml;
+}
 ```
 
 ## API
@@ -76,59 +81,17 @@ type ParseResult =
   | { success: false; error: ParseError };
 ```
 
-### `ParsedMessage`
+### Core Types
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `subject` | `string` | Message subject |
-| `senderName` | `string` | Sender display name |
-| `senderEmail` | `string` | Sender email |
-| `recipients` | `Recipient[]` | To recipients |
-| `ccRecipients` | `Recipient[]` | CC recipients |
-| `bccRecipients` | `Recipient[]` | BCC recipients |
-| `bodyText` | `string` | Plain text body |
-| `bodyHtml` | `string` | Sanitized HTML body |
-| `headers` | `MessageHeaders` | Date, message ID, importance |
-| `attachments` | `Attachment[]` | Attachments and inline resources |
+`ParsedMessage` includes:
 
-### `Recipient`
+- `subject`, `senderName`, `senderEmail`
+- `recipients`, `ccRecipients`, `bccRecipients`
+- `bodyText`, `bodyHtml`
+- `headers` (`date`, `dateObject`, `messageId`, `inReplyTo`, `importance`)
+- `attachments` (`filename`, `mimeType`, `contentId`, `content`, `size`, `isInline`, optional `embeddedMessage`)
 
-| Field | Type |
-| --- | --- |
-| `name` | `string` |
-| `email` | `string` |
-| `type` | `'to' \| 'cc' \| 'bcc'` |
-
-### `MessageHeaders`
-
-| Field | Type |
-| --- | --- |
-| `date` | `string` |
-| `dateObject` | `Date \| null` |
-| `messageId` | `string` |
-| `inReplyTo` | `string` |
-| `importance` | `'low' \| 'normal' \| 'high'` |
-
-### `Attachment`
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `filename` | `string` | Attachment filename |
-| `mimeType` | `string` | MIME type |
-| `contentId` | `string` | Used for inline `cid:` references |
-| `content` | `Uint8Array` | Raw bytes |
-| `size` | `number` | Byte length |
-| `isInline` | `boolean` | Inline/embedded indicator |
-| `embeddedMessage` | `ParsedMessage \| undefined` | Present for embedded `.msg` attachments |
-
-### `ParseError`
-
-| Field | Type |
-| --- | --- |
-| `code` | `ParseErrorCode` |
-| `message` | `string` |
-
-`ParseErrorCode` values:
+`ParseErrorCode`:
 
 - `INVALID_CFB`
 - `INVALID_EML`
@@ -138,22 +101,20 @@ type ParseResult =
 - `SANITIZATION_FAILED`
 - `UNKNOWN_ERROR`
 
-## Security Model
+## Security
 
-`bodyHtml` is sanitized before returning from `parseMsgFile`.
+`bodyHtml` is sanitized before it is returned:
 
-Current protections include:
-
-- removes `<script>` tags
-- strips inline event handlers (`on*`)
+- strips `<script>` tags
+- strips `on*` event handlers
 - blocks `javascript:` URLs
-- strips known tracking-pixel patterns (1x1 images)
-- rewrites `cid:` image references to safe `data:` URIs using attachment bytes
+- removes common 1x1 tracking pixels
+- resolves `cid:` image references safely using attachment bytes
 
-## Runtime Compatibility
+## Compatibility
 
-- Browser-safe parser code (`ArrayBuffer` / `Uint8Array`)
-- Dual package output:
+- Input: `ArrayBuffer` and `Uint8Array`
+- Output bundles:
   - ESM: `dist/index.mjs`
   - CJS: `dist/index.js`
   - Types: `dist/index.d.ts`
@@ -167,52 +128,18 @@ npm run typecheck
 npm run build
 ```
 
-Useful local files:
-
-- `sandbox.html` for browser preview/testing
-- `playground.mjs` for quick Node parsing tests
-
-## Release Checklist (Git + npm)
-
-### 1) Validate locally
+## Release Workflow
 
 ```bash
 npm run test
 npm run typecheck
 npm run build
-```
-
-### 2) Update version
-
-Choose one:
-
-```bash
-npm version patch
-npm version minor
-npm version major
-```
-
-This updates `package.json`, `package-lock.json`, creates a commit, and tags the release.
-
-### 3) Push code and tags
-
-```bash
+npm version patch   # or minor / major
 git push origin main
 git push origin --tags
-```
-
-### 4) Publish to npm
-
-```bash
 npm publish --access public
-```
-
-### 5) Verify published version
-
-```bash
-npm view msg-lens version
 ```
 
 ## License
 
-ISC
+MIT © msg-lens contributors. See [LICENSE](./LICENSE).
