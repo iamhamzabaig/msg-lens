@@ -1,6 +1,6 @@
 {
   "name": "msg-lens",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Universal .msg (Outlook) file parser that outputs sanitized HTML",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
